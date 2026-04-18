@@ -233,7 +233,7 @@ function getThoughts(rec){
 }
 
 // ── STATE ────────────────────────────────────────────────────────
-let S={view:'list',problems:[],records:[],pin:null,step:0,form:{},detailId:null,editId:null,filterProbId:'all',dashProbId:'all',dashCalMonth:null,showExport:false,exportText:'',showProbModal:false,showEmailModal:false,pendingEmailIds:null,loaded:false,openEmos:new Set(),selectMode:false,selectedIds:new Set()};
+let S={view:'list',problems:[],records:[],pin:null,step:0,form:{},detailId:null,editId:null,filterProbId:'all',dashProbId:'all',dashCalMonth:null,showExport:false,exportText:'',showProbModal:false,showEmailModal:false,pendingEmailIds:null,loaded:false,openEmos:new Set(),selectMode:false,selectedIds:new Set(),editingProbId:null};
 function newThought(){return{id:newId(),text:'',emotions:[],distortion:null,evidencias:'',alternativo:'',conducta:{tipo:null,desc:''},finalEmotions:[]}}
 function emptyForm(){return{problemId:null,titulo:'',situacion:'',thoughts:[newThought()]}}
 
@@ -936,7 +936,27 @@ function setupEmailModal(){
   document.getElementById('email-to')?.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('btn-send-email')?.click()});
 }
 function renderProbModal(){
-  return`<div class="modal-overlay" id="moverlay"><div class="modal"><div class="modal-hdr"><div class="modal-title">Nuevo problema</div><button class="btn btn-ghost btn-sm" id="btn-close-pm">✕</button></div><div class="modal-body"><p style="font-size:13px;color:var(--txt2);margin-bottom:1rem">Los problemas agrupan tus registros por área temática: trabajo, relaciones, autoestima, salud...</p><input type="text" id="pm-name" placeholder="Nombre del problema"></div><div class="modal-footer"><button class="btn btn-ghost" id="btn-cancel-pm">Cancelar</button><button class="btn btn-primary" id="btn-save-pm">Crear</button></div></div></div>`;
+  const list=S.problems.map(p=>{
+    const cnt=S.records.filter(r=>String(r.problemId)===String(p.id)).length;
+    const isEditing=S.editingProbId===String(p.id);
+    return`<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--bdr)">
+      ${isEditing
+        ?`<input type="text" id="edit-prob-inp-${p.id}" value="${p.name}" style="flex:1;font-size:14px">`
+        :`<span style="flex:1;font-size:14px;font-weight:500">${p.name}</span>`}
+      <span style="font-size:11px;color:var(--txt3);white-space:nowrap">${cnt} registro${cnt!==1?'s':''}</span>
+      ${isEditing
+        ?`<button class="btn btn-primary btn-sm" data-save-prob="${p.id}">Guardar</button><button class="btn btn-ghost btn-sm" data-cancel-edit="${p.id}">✕</button>`
+        :`<button class="btn btn-ghost btn-sm" data-edit-prob="${p.id}">✎</button><button class="btn btn-danger btn-sm" data-del-prob="${p.id}">✕</button>`}
+    </div>`;
+  }).join('');
+  return`<div class="modal-overlay" id="moverlay"><div class="modal"><div class="modal-hdr"><div class="modal-title">Gestionar problemas</div><button class="btn btn-ghost btn-sm" id="btn-close-pm">✕</button></div>
+  <div class="modal-body">
+    ${S.problems.length?`<div style="margin-bottom:1.2rem">${list}</div>`:`<p style="font-size:13px;color:var(--txt3);margin-bottom:1rem">No tienes problemas creados todavía.</p>`}
+    <div style="font-size:12px;font-weight:500;color:var(--txt2);margin-bottom:6px">Nuevo problema</div>
+    <div style="display:flex;gap:7px"><input type="text" id="pm-name" placeholder="Nombre del problema..."><button class="btn btn-primary btn-sm" id="btn-save-pm" style="white-space:nowrap">Crear</button></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-ghost" id="btn-cancel-pm">Cerrar</button></div>
+  </div></div>`;
 }
 function renderExportModal(){
   return`<div class="modal-overlay"><div class="modal"><div class="modal-hdr"><div class="modal-title">Exportar registro</div><button class="btn btn-ghost btn-sm" id="btn-close-exp">✕</button></div><div class="modal-body"><textarea class="export-ta" id="exp-ta" readonly>${S.exportText}</textarea></div><div class="modal-footer"><span class="copied" id="copied-msg">✓ Copiado</span><button class="btn btn-ghost" id="btn-close-exp2">Cerrar</button><button class="btn btn-primary" id="btn-copy-exp">Copiar texto</button></div></div></div>`;
@@ -969,12 +989,37 @@ function saveThoughtTextareas(){
 
 // ── MODAL SETUPS ─────────────────────────────────────────────────
 function setupProbModal(){
-  const close=()=>{S.showProbModal=false;render()};
+  const close=()=>{S.showProbModal=false;S.editingProbId=null;render()};
   document.getElementById('btn-close-pm')?.addEventListener('click',close);
   document.getElementById('btn-cancel-pm')?.addEventListener('click',close);
   document.getElementById('moverlay')?.addEventListener('click',e=>{if(e.target.id==='moverlay')close()});
-  document.getElementById('btn-save-pm')?.addEventListener('click',()=>{const name=document.getElementById('pm-name')?.value?.trim();if(!name)return;S.problems.push({id:String(Date.now()),name});saveData();S.showProbModal=false;render()});
+  document.getElementById('btn-save-pm')?.addEventListener('click',()=>{
+    const name=document.getElementById('pm-name')?.value?.trim();if(!name)return;
+    S.problems.push({id:String(Date.now()),name});saveData();render();
+  });
   document.getElementById('pm-name')?.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('btn-save-pm')?.click()});
+  document.querySelectorAll('[data-edit-prob]').forEach(b=>b.addEventListener('click',()=>{S.editingProbId=b.dataset.editProb;render()}));
+  document.querySelectorAll('[data-cancel-edit]').forEach(b=>b.addEventListener('click',()=>{S.editingProbId=null;render()}));
+  document.querySelectorAll('[data-save-prob]').forEach(b=>b.addEventListener('click',()=>{
+    const pid=b.dataset.saveProb;
+    const name=document.getElementById(`edit-prob-inp-${pid}`)?.value?.trim();
+    if(!name)return;
+    const p=S.problems.find(p=>String(p.id)===pid);if(p)p.name=name;
+    saveData();S.editingProbId=null;render();
+  }));
+  document.querySelectorAll('[data-del-prob]').forEach(b=>b.addEventListener('click',()=>{
+    const pid=b.dataset.delProb;
+    const p=S.problems.find(p=>String(p.id)===pid);if(!p)return;
+    const cnt=S.records.filter(r=>String(r.problemId)===pid).length;
+    const msg=cnt>0
+      ?`¿Eliminar el problema "${p.name}"?\n\nTiene ${cnt} registro${cnt!==1?'s':''}.\nSus registros quedarán sin problema asignado.`
+      :`¿Eliminar el problema "${p.name}"?`;
+    if(!confirm(msg))return;
+    S.records.forEach(r=>{if(String(r.problemId)===pid)r.problemId=null});
+    S.problems=S.problems.filter(p=>String(p.id)!==pid);
+    if(String(S.filterProbId)===pid)S.filterProbId='all';
+    saveData();render();
+  }));
 }
 function setupExportModal(){
   const close=()=>{S.showExport=false;render()};

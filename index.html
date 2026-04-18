@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Diario Psicológico</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500&family=DM+Sans:wght@300;400;500&display=swap');
 :root{--bg:#FAF8F4;--sur:#FFF;--sur2:#F3F0EA;--bdr:#E2DDD4;--bdr2:#C8C2B7;--txt:#2C2A26;--txt2:#6B6660;--txt3:#9E9890;--acc:#4A7C6F;--accL:#EBF3F0;--accD:#2D5C52;--wrm:#C17B4A;--wrmL:#FBF2EA;--dng:#A84040;--dngL:#FBF0F0;--r:12px;--rs:8px}
@@ -131,7 +133,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 .bar-fill{height:100%;border-radius:6px;transition:width .5s ease}
 .bar-cnt{font-size:11px;color:var(--txt3);min-width:20px}
 /* Modal */
-.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem}
+.drive-bar{display:flex;align-items:center;gap:8px;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rs);padding:8px 13px;margin-bottom:1rem;font-size:13px}
+.drive-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.drive-dot.connected{background:#4A7C6F}
+.drive-dot.disconnected{background:#C8C2B7}
+.drive-dot.syncing{background:#C17B4A;animation:pulse .8s infinite alternate}
+@keyframes pulse{from{opacity:1}to{opacity:.3}}
+.drive-status{flex:1;color:var(--txt2)}
+.drive-user{font-size:11px;color:var(--txt3)}
 .cal-month{font-family:'Lora',serif;font-size:1rem;font-weight:400}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
 .cal-dow{font-size:10px;font-weight:500;color:var(--txt3);text-align:center;padding:4px 0;letter-spacing:.04em}
@@ -214,14 +223,123 @@ function newThought(){return{id:newId(),text:'',emotions:[],distortion:null,evid
 function emptyForm(){return{problemId:null,titulo:'',situacion:'',thoughts:[newThought()]}}
 
 // ── STORAGE ──────────────────────────────────────────────────────
+// ── GOOGLE DRIVE SYNC ────────────────────────────────────────────
+const CLIENT_ID='388665221355-efstj9prdqajl028eovosa0dpdjdlq25.apps.googleusercontent.com';
+const SCOPES='https://www.googleapis.com/auth/drive.appdata';
+const FILE_NAME='diario-psicologico.json';
+let GD={token:null,fileId:null,user:null,syncing:false,enabled:false};
+
+function renderDriveBar(){
+  if(!GD.enabled)return`<div class="drive-bar"><div class="drive-dot disconnected"></div><span class="drive-status">Sin sincronización con Drive</span><button class="btn btn-ghost btn-sm" id="btn-drive-connect" style="margin-left:auto">Conectar Drive</button></div>`;
+  if(GD.syncing)return`<div class="drive-bar"><div class="drive-dot syncing"></div><span class="drive-status">Sincronizando...</span>${GD.user?`<span class="drive-user">${GD.user}</span>`:''}</div>`;
+  return`<div class="drive-bar"><div class="drive-dot connected"></div><span class="drive-status">Sincronizado con Drive</span>${GD.user?`<span class="drive-user">${GD.user}</span>`:''}<button class="btn btn-ghost btn-sm" id="btn-drive-sync" style="margin-left:auto">↺ Sync</button><button class="btn btn-ghost btn-sm" id="btn-drive-disconnect">Desconectar</button></div>`;
+}
+
+function driveSignIn(){
+  const client=google.accounts.oauth2.initTokenClient({
+    client_id:CLIENT_ID,scope:SCOPES,
+    callback:async(resp)=>{
+      if(resp.error){alert('Error al conectar con Google: '+resp.error);return;}
+      GD.token=resp.access_token;GD.enabled=true;
+      // Get user info
+      try{
+        const ui=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+GD.token}});
+        const ud=await ui.json();GD.user=ud.email;
+      }catch(e){}
+      localStorage.setItem('drive_enabled','1');
+      await driveLoad();
+    }
+  });
+  client.requestAccessToken();
+}
+
+function driveDisconnect(){
+  if(GD.token)google.accounts.oauth2.revoke(GD.token);
+  GD={token:null,fileId:null,user:null,syncing:false,enabled:false};
+  localStorage.removeItem('drive_enabled');
+  render();
+}
+
+async function driveGetFileId(){
+  if(GD.fileId)return GD.fileId;
+  const r=await fetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${FILE_NAME}'&fields=files(id)`,{headers:{Authorization:'Bearer '+GD.token}});
+  const d=await r.json();
+  if(d.files&&d.files.length>0){GD.fileId=d.files[0].id;return GD.fileId;}
+  return null;
+}
+
+async function driveLoad(){
+  if(!GD.token)return;
+  GD.syncing=true;render();
+  try{
+    const fid=await driveGetFileId();
+    if(fid){
+      const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media`,{headers:{Authorization:'Bearer '+GD.token}});
+      const d=await r.json();
+      if(d.problems)S.problems=d.problems;
+      if(d.records)S.records=d.records;
+      // Also sync to localStorage
+      localStorage.setItem('dproblem',JSON.stringify(S.problems));
+      localStorage.setItem('drecords',JSON.stringify(S.records));
+    }
+    // No file yet — first time, will be created on first save
+  }catch(e){console.error('Drive load error',e);}
+  GD.syncing=false;S.loaded=true;render();
+}
+
+async function driveSave(){
+  if(!GD.enabled||!GD.token)return;
+  GD.syncing=true;render();
+  try{
+    const data=JSON.stringify({problems:S.problems,records:S.records});
+    const fid=await driveGetFileId();
+    if(fid){
+      // Update existing file
+      await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fid}?uploadType=media`,{method:'PATCH',headers:{Authorization:'Bearer '+GD.token,'Content-Type':'application/json'},body:data});
+    }else{
+      // Create new file in appDataFolder
+      const meta=JSON.stringify({name:FILE_NAME,parents:['appDataFolder']});
+      const form=new FormData();
+      form.append('metadata',new Blob([meta],{type:'application/json'}));
+      form.append('file',new Blob([data],{type:'application/json'}));
+      const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{method:'POST',headers:{Authorization:'Bearer '+GD.token},body:form});
+      const rd=await r.json();GD.fileId=rd.id;
+    }
+  }catch(e){console.error('Drive save error',e);}
+  GD.syncing=false;render();
+}
+
+// Restore Drive session on load (token needs re-auth, but we show the state)
+function restoreDriveState(){
+  if(localStorage.getItem('drive_enabled')==='1'){
+    GD.enabled=true;
+    // Token expired — silently re-auth
+    try{
+      const client=google.accounts.oauth2.initTokenClient({
+        client_id:CLIENT_ID,scope:SCOPES,prompt:'',
+        callback:async(resp)=>{
+          if(resp.error)return;
+          GD.token=resp.access_token;
+          try{const ui=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+GD.token}});const ud=await ui.json();GD.user=ud.email;}catch(e){}
+          await driveLoad();
+        }
+      });
+      client.requestAccessToken();
+    }catch(e){GD.enabled=false;}
+  }
+}
+
 function loadData(){
   try{S.problems=JSON.parse(localStorage.getItem('dproblem')||'[]')}catch(e){S.problems=[]}
   try{S.records=JSON.parse(localStorage.getItem('drecords')||'[]')}catch(e){S.records=[]}
   S.loaded=true;render();
+  // Try to restore Drive after gsi loads
+  window.addEventListener('load',()=>{setTimeout(restoreDriveState,800)});
 }
 function saveData(){
   localStorage.setItem('dproblem',JSON.stringify(S.problems));
   localStorage.setItem('drecords',JSON.stringify(S.records));
+  driveSave();
 }
 function exportBackupJSON(){
   const blob=new Blob([JSON.stringify({problems:S.problems,records:S.records},null,2)],{type:'application/json'});
@@ -271,9 +389,10 @@ function renderHeader(){
 // ── LIST ─────────────────────────────────────────────────────────
 function renderList(){
   const recs=getFilteredRecs(S.filterProbId).sort((a,b)=>b.id-a.id);
-  if(!S.records.length)return`<div class="empty"><div class="empty-icon">✦</div><div class="empty-title">Sin registros aún</div><div class="empty-sub">Los registros te ayudan a identificar patrones<br>y hacen el trabajo con tu psicólogo más productivo.</div><button class="btn btn-primary" id="btn-new-rec">Crear primer registro</button></div>`;
-  if(!recs.length)return`<div class="empty"><div class="empty-icon">○</div><div class="empty-title">Sin registros en este problema</div><div class="empty-sub">Crea un nuevo registro y asígnalo aquí.</div></div>`;
-  return`<div class="records-list">${recs.map(r=>{
+  const driveBar=renderDriveBar();
+  if(!S.records.length)return driveBar+`<div class="empty"><div class="empty-icon">✦</div><div class="empty-title">Sin registros aún</div><div class="empty-sub">Los registros te ayudan a identificar patrones<br>y hacen el trabajo con tu psicólogo más productivo.</div><button class="btn btn-primary" id="btn-new-rec">Crear primer registro</button></div>`;
+  if(!recs.length)return driveBar+`<div class="empty"><div class="empty-icon">○</div><div class="empty-title">Sin registros en este problema</div><div class="empty-sub">Crea un nuevo registro y asígnalo aquí.</div></div>`;
+  return driveBar+`<div class="records-list">${recs.map(r=>{
     const thoughts=getThoughts(r);
     const allEmos=thoughts.flatMap(t=>t.emotions||[]);
     const allFinal=thoughts.flatMap(t=>t.finalEmotions||[]);
@@ -775,6 +894,9 @@ function setupInteractions(){
   document.getElementById('btn-to-list')?.addEventListener('click',()=>{S.view='list';render()});
   document.querySelectorAll('#btn-new-rec').forEach(b=>b.addEventListener('click',()=>{S.view='new';S.step=0;S.form=emptyForm();S.openEmos=new Set([String(S.form.thoughts[0].id)]);render()}));
   document.getElementById('btn-new-prob')?.addEventListener('click',()=>{S.showProbModal=true;render()});
+  document.getElementById('btn-drive-connect')?.addEventListener('click',driveSignIn);
+  document.getElementById('btn-drive-disconnect')?.addEventListener('click',driveDisconnect);
+  document.getElementById('btn-drive-sync')?.addEventListener('click',driveLoad);
   document.getElementById('btn-dash')?.addEventListener('click',()=>{S.view='dashboard';render()});
   document.getElementById('btn-backup')?.addEventListener('click',exportBackupJSON);
   document.getElementById('inp-restore')?.addEventListener('change',e=>{if(e.target.files[0])importBackupJSON(e.target.files[0])});

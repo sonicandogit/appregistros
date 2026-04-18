@@ -133,7 +133,19 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 .bar-fill{height:100%;border-radius:6px;transition:width .5s ease}
 .bar-cnt{font-size:11px;color:var(--txt3);min-width:20px}
 /* Modal */
-.drive-bar{display:flex;align-items:center;gap:8px;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rs);padding:8px 13px;margin-bottom:1rem;font-size:13px}
+.pin-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)}
+.pin-box{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:2.5rem 2rem;width:320px;text-align:center}
+.pin-title{font-family:'Lora',serif;font-size:1.3rem;font-weight:400;margin-bottom:.4rem}
+.pin-sub{font-size:13px;color:var(--txt3);margin-bottom:1.8rem}
+.pin-dots{display:flex;justify-content:center;gap:12px;margin-bottom:1.8rem}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--bdr2);background:transparent;transition:all .15s}
+.pin-dot.filled{background:var(--acc);border-color:var(--acc)}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1rem}
+.pin-key{font-family:'Lora',serif;font-size:1.3rem;padding:14px;border-radius:var(--rs);border:1px solid var(--bdr);background:var(--sur);cursor:pointer;transition:all .15s;color:var(--txt)}
+.pin-key:hover{background:var(--sur2);border-color:var(--bdr2)}
+.pin-key:active{transform:scale(.94)}
+.pin-error{font-size:13px;color:var(--dng);margin-top:.5rem;min-height:20px}
+.pin-setup-hint{font-size:12px;color:var(--txt3);margin-top:1rem}align-items:center;gap:8px;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rs);padding:8px 13px;margin-bottom:1rem;font-size:13px}
 .drive-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .drive-dot.connected{background:#4A7C6F}
 .drive-dot.disconnected{background:#C8C2B7}
@@ -354,10 +366,77 @@ function importBackupJSON(file){
 function getProbName(id){const p=S.problems.find(p=>String(p.id)===String(id));return p?p.name:'Sin problema'}
 function getFilteredRecs(probId){return probId==='all'?S.records:S.records.filter(r=>String(r.problemId)===String(probId))}
 
+// ── PIN ──────────────────────────────────────────────────────────
+const PIN_KEY='app_pin';
+let PIN={unlocked:false,setting:false,input:'',confirm:'',error:'',step:1};
+
+function hasPin(){return!!localStorage.getItem(PIN_KEY)}
+function checkPin(val){return localStorage.getItem(PIN_KEY)===val}
+function savePin(val){localStorage.setItem(PIN_KEY,val)}
+function removePin(){localStorage.removeItem(PIN_KEY)}
+
+function renderPinScreen(){
+  const isSetup=PIN.setting||!hasPin();
+  const title=isSetup?(PIN.step===1?'Crear PIN':'Confirmar PIN'):'Introduce tu PIN';
+  const sub=isSetup?(PIN.step===1?'Elige un PIN de 6 dígitos':'Repite el PIN para confirmar'):'Tu diario está protegido';
+  const current=isSetup?(PIN.step===1?PIN.input:PIN.confirm):PIN.input;
+  const dots=[0,1,2,3,4,5].map(i=>`<div class="pin-dot ${i<current.length?'filled':''}"></div>`).join('');
+  const keys=[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>{
+    if(k==='')return`<div></div>`;
+    return`<button class="pin-key" data-key="${k}">${k}</button>`;
+  }).join('');
+  const changeBtn=!isSetup&&hasPin()?`<div style="margin-top:1rem"><button class="btn btn-ghost btn-sm" id="btn-change-pin">Cambiar PIN</button></div>`:'';
+  return`<div class="pin-wrap"><div class="pin-box">
+    <div style="font-size:1.8rem;margin-bottom:.8rem">🔒</div>
+    <div class="pin-title">${title}</div>
+    <div class="pin-sub">${sub}</div>
+    <div class="pin-dots">${dots}</div>
+    <div class="pin-pad">${keys}</div>
+    <div class="pin-error">${PIN.error}</div>
+    ${changeBtn}
+    ${isSetup&&PIN.step===1?`<div class="pin-setup-hint">Si no quieres PIN, deja los campos vacíos y pulsa 0000</div>`:''}
+  </div></div>`;
+}
+
+function setupPinInteractions(){
+  document.querySelectorAll('[data-key]').forEach(b=>b.addEventListener('click',()=>{
+    const k=b.dataset.key;
+    const isSetup=PIN.setting||!hasPin();
+    const target=isSetup?(PIN.step===1?'input':'confirm'):'input';
+    if(k==='⌫'){PIN[target]=PIN[target].slice(0,-1);PIN.error='';}
+    else if(PIN[target].length<6){PIN[target]+=k;}
+    // Auto-submit at 4 digits
+    if(PIN[target].length===6){
+      if(!isSetup){
+        // Unlock
+        if(checkPin(PIN[target])){PIN.unlocked=true;PIN.input='';}
+        else{PIN.error='PIN incorrecto. Inténtalo de nuevo.';PIN.input='';}
+      } else {
+        if(PIN.step===1){PIN.step=2;}
+        else{
+          // Confirm
+          if(PIN.input===PIN.confirm){savePin(PIN.input);PIN.unlocked=true;PIN.setting=false;PIN.input='';PIN.confirm='';PIN.step=1;}
+          else{PIN.error='Los PINs no coinciden. Inténtalo de nuevo.';PIN.confirm='';PIN.step=1;}
+        }
+      }
+    }
+    const app=document.getElementById('app');
+    if(PIN.unlocked){render();}
+    else{app.innerHTML=renderPinScreen();setupPinInteractions();}
+  }));
+  document.getElementById('btn-change-pin')?.addEventListener('click',()=>{
+    PIN.setting=true;PIN.input='';PIN.confirm='';PIN.step=1;PIN.error='';
+    const app=document.getElementById('app');app.innerHTML=renderPinScreen();setupPinInteractions();
+  });
+}
+
 // ── RENDER DISPATCH ──────────────────────────────────────────────
 function render(){
   const app=document.getElementById('app');
   if(!S.loaded){app.innerHTML='<p style="color:var(--txt3);padding:3rem;text-align:center">Cargando...</p>';return}
+  // PIN gate
+  if(hasPin()&&!PIN.unlocked){app.innerHTML=renderPinScreen();setupPinInteractions();return}
+  if(!hasPin()&&!PIN.unlocked){app.innerHTML=renderPinScreen();setupPinInteractions();return}
   if(S.showProbModal){app.innerHTML=renderProbModal();setupProbModal();return}
   if(S.showExport){app.innerHTML=renderExportModal();setupExportModal();return}
   if(S.showEmailModal){app.innerHTML=renderEmailModal();setupEmailModal();return}
@@ -382,7 +461,7 @@ function renderHeader(){
   const filter=S.problems.length?`<div class="prob-filter"><button class="prob-pill ${S.filterProbId==='all'?'active':''}" data-pid="all">Todos</button>${pills}</div>`:'';
   const listBtns=S.selectMode
     ? `<span style="font-size:13px;color:var(--txt2);align-self:center">${S.selectedIds.size} seleccionado${S.selectedIds.size!==1?'s':''}</span><button class="btn btn-ghost btn-sm" id="btn-sel-all">Todos</button><button class="btn btn-ghost btn-sm" id="btn-sel-none">Ninguno</button><button class="btn btn-primary btn-sm" id="btn-pdf-export" ${S.selectedIds.size===0?'disabled style="opacity:.5"':''}>Exportar PDF</button><button class="btn btn-ghost btn-sm" id="btn-email-export" ${S.selectedIds.size===0?'disabled style="opacity:.5"':''}>✉ Email</button><button class="btn btn-ghost btn-sm" id="btn-cancel-select">Cancelar</button>`
-    : `<button class="btn btn-ghost btn-sm" id="btn-dash">Ver análisis</button><button class="btn btn-ghost btn-sm" id="btn-select-mode">Exportar PDF</button><button class="btn btn-ghost btn-sm" id="btn-backup">⬇ Backup</button><label class="btn btn-ghost btn-sm" style="cursor:pointer"><input type="file" id="inp-restore" accept=".json" style="display:none">⬆ Restaurar</label><button class="btn btn-ghost btn-sm" id="btn-new-prob">+ Problema</button><button class="btn btn-primary btn-sm" id="btn-new-rec">+ Registro</button>`;
+    : `<button class="btn btn-ghost btn-sm" id="btn-dash">Ver análisis</button><button class="btn btn-ghost btn-sm" id="btn-select-mode">Exportar PDF</button><button class="btn btn-ghost btn-sm" id="btn-backup">⬇ Backup</button><label class="btn btn-ghost btn-sm" style="cursor:pointer"><input type="file" id="inp-restore" accept=".json" style="display:none">⬆ Restaurar</label><button class="btn btn-ghost btn-sm" id="btn-pin-change">🔒</button><button class="btn btn-ghost btn-sm" id="btn-new-prob">+ Problema</button><button class="btn btn-primary btn-sm" id="btn-new-rec">+ Registro</button>`;
   return`<div class="hdr"><div><div class="hdr-title">Diario de registros</div><div class="hdr-sub">${cntTxt} · ${S.problems.length} problema${S.problems.length!==1?'s':''}</div></div><div class="hdr-actions">${S.view==='list'?listBtns:`<button class="btn btn-ghost btn-sm" id="btn-to-list">← Lista</button>`}</div></div>${filter}`;
 }
 
@@ -897,6 +976,7 @@ function setupInteractions(){
   document.getElementById('btn-drive-connect')?.addEventListener('click',driveSignIn);
   document.getElementById('btn-drive-disconnect')?.addEventListener('click',driveDisconnect);
   document.getElementById('btn-drive-sync')?.addEventListener('click',driveLoad);
+  document.getElementById('btn-pin-change')?.addEventListener('click',()=>{PIN.setting=true;PIN.input='';PIN.confirm='';PIN.step=1;PIN.error='';PIN.unlocked=false;const app=document.getElementById('app');app.innerHTML=renderPinScreen();setupPinInteractions()});
   document.getElementById('btn-dash')?.addEventListener('click',()=>{S.view='dashboard';render()});
   document.getElementById('btn-backup')?.addEventListener('click',exportBackupJSON);
   document.getElementById('inp-restore')?.addEventListener('change',e=>{if(e.target.files[0])importBackupJSON(e.target.files[0])});

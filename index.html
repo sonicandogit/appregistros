@@ -230,7 +230,7 @@ function getThoughts(rec){
 }
 
 // ── STATE ────────────────────────────────────────────────────────
-let S={view:'list',problems:[],records:[],step:0,form:{},detailId:null,editId:null,filterProbId:'all',dashProbId:'all',dashCalMonth:null,showExport:false,exportText:'',showProbModal:false,showEmailModal:false,pendingEmailIds:null,loaded:false,openEmos:new Set(),selectMode:false,selectedIds:new Set()};
+let S={view:'list',problems:[],records:[],pin:null,step:0,form:{},detailId:null,editId:null,filterProbId:'all',dashProbId:'all',dashCalMonth:null,showExport:false,exportText:'',showProbModal:false,showEmailModal:false,pendingEmailIds:null,loaded:false,openEmos:new Set(),selectMode:false,selectedIds:new Set()};
 function newThought(){return{id:newId(),text:'',emotions:[],distortion:null,evidencias:'',alternativo:'',conducta:{tipo:null,desc:''},finalEmotions:[]}}
 function emptyForm(){return{problemId:null,titulo:'',situacion:'',thoughts:[newThought()]}}
 
@@ -290,6 +290,7 @@ async function driveLoad(){
       const d=await r.json();
       if(d.problems)S.problems=d.problems;
       if(d.records)S.records=d.records;
+      if(d.pin){S.pin=d.pin;localStorage.setItem('app_pin',d.pin);}
       // Also sync to localStorage
       localStorage.setItem('dproblem',JSON.stringify(S.problems));
       localStorage.setItem('drecords',JSON.stringify(S.records));
@@ -303,7 +304,7 @@ async function driveSave(){
   if(!GD.enabled||!GD.token)return;
   GD.syncing=true;render();
   try{
-    const data=JSON.stringify({problems:S.problems,records:S.records});
+    const data=JSON.stringify({problems:S.problems,records:S.records,pin:S.pin||null});
     const fid=await driveGetFileId();
     if(fid){
       // Update existing file
@@ -344,8 +345,8 @@ function restoreDriveState(){
 function loadData(){
   try{S.problems=JSON.parse(localStorage.getItem('dproblem')||'[]')}catch(e){S.problems=[]}
   try{S.records=JSON.parse(localStorage.getItem('drecords')||'[]')}catch(e){S.records=[]}
+  S.pin=localStorage.getItem('app_pin')||null;
   S.loaded=true;render();
-  // Try to restore Drive after gsi loads
   window.addEventListener('load',()=>{setTimeout(restoreDriveState,800)});
 }
 function saveData(){
@@ -367,13 +368,16 @@ function getProbName(id){const p=S.problems.find(p=>String(p.id)===String(id));r
 function getFilteredRecs(probId){return probId==='all'?S.records:S.records.filter(r=>String(r.problemId)===String(probId))}
 
 // ── PIN ──────────────────────────────────────────────────────────
-const PIN_KEY='app_pin';
 let PIN={unlocked:false,setting:false,input:'',confirm:'',error:'',step:1};
 
-function hasPin(){return!!localStorage.getItem(PIN_KEY)}
-function checkPin(val){return localStorage.getItem(PIN_KEY)===val}
-function savePin(val){localStorage.setItem(PIN_KEY,val)}
-function removePin(){localStorage.removeItem(PIN_KEY)}
+function hasPin(){return!!(S.pin||localStorage.getItem('app_pin'))}
+function checkPin(val){return (S.pin||localStorage.getItem('app_pin'))===val}
+function savePin(val){
+  S.pin=val;
+  localStorage.setItem('app_pin',val);
+  saveData(); // persist to Drive too
+}
+function removePin(){S.pin=null;localStorage.removeItem('app_pin');saveData();}
 
 function renderPinScreen(){
   const isSetup=PIN.setting||!hasPin();
@@ -461,7 +465,7 @@ function renderHeader(){
   const filter=S.problems.length?`<div class="prob-filter"><button class="prob-pill ${S.filterProbId==='all'?'active':''}" data-pid="all">Todos</button>${pills}</div>`:'';
   const listBtns=S.selectMode
     ? `<span style="font-size:13px;color:var(--txt2);align-self:center">${S.selectedIds.size} seleccionado${S.selectedIds.size!==1?'s':''}</span><button class="btn btn-ghost btn-sm" id="btn-sel-all">Todos</button><button class="btn btn-ghost btn-sm" id="btn-sel-none">Ninguno</button><button class="btn btn-primary btn-sm" id="btn-pdf-export" ${S.selectedIds.size===0?'disabled style="opacity:.5"':''}>Exportar PDF</button><button class="btn btn-ghost btn-sm" id="btn-email-export" ${S.selectedIds.size===0?'disabled style="opacity:.5"':''}>✉ Email</button><button class="btn btn-ghost btn-sm" id="btn-cancel-select">Cancelar</button>`
-    : `<button class="btn btn-ghost btn-sm" id="btn-dash">Ver análisis</button><button class="btn btn-ghost btn-sm" id="btn-select-mode">Exportar PDF</button><button class="btn btn-ghost btn-sm" id="btn-backup">⬇ Backup</button><label class="btn btn-ghost btn-sm" style="cursor:pointer"><input type="file" id="inp-restore" accept=".json" style="display:none">⬆ Restaurar</label><button class="btn btn-ghost btn-sm" id="btn-pin-change">🔒</button><button class="btn btn-ghost btn-sm" id="btn-new-prob">+ Problema</button><button class="btn btn-primary btn-sm" id="btn-new-rec">+ Registro</button>`;
+    : `<button class="btn btn-ghost btn-sm" id="btn-dash">Ver análisis</button><button class="btn btn-ghost btn-sm" id="btn-select-mode">Exportar PDF</button><button class="btn btn-ghost btn-sm" id="btn-backup">⬇ Backup</button><label class="btn btn-ghost btn-sm" style="cursor:pointer"><input type="file" id="inp-restore" accept=".json" style="display:none">⬆ Restaurar</label><button class="btn btn-ghost btn-sm" id="btn-pin-change" title="Cambiar PIN de acceso">PIN</button><button class="btn btn-ghost btn-sm" id="btn-new-prob">+ Problema</button><button class="btn btn-primary btn-sm" id="btn-new-rec">+ Registro</button>`;
   return`<div class="hdr"><div><div class="hdr-title">Diario de registros</div><div class="hdr-sub">${cntTxt} · ${S.problems.length} problema${S.problems.length!==1?'s':''}</div></div><div class="hdr-actions">${S.view==='list'?listBtns:`<button class="btn btn-ghost btn-sm" id="btn-to-list">← Lista</button>`}</div></div>${filter}`;
 }
 

@@ -329,21 +329,31 @@ async function driveSave(){
 function restoreDriveState(){
   if(localStorage.getItem('drive_enabled')==='1'){
     GD.enabled=true;
-    // Token expired — silently re-auth
-    try{
-      const client=google.accounts.oauth2.initTokenClient({
-        client_id:CLIENT_ID,scope:SCOPES,prompt:'',
-        callback:async(resp)=>{
-          if(resp.error)return;
-          GD.token=resp.access_token;
-          try{const ui=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+GD.token}});const ud=await ui.json();GD.user=ud.email;}catch(e){}
-          await driveLoad();
-        }
-      });
-      client.requestAccessToken();
-    }catch(e){GD.enabled=false;}
+    silentReauth(driveLoad);
   }
 }
+
+function silentReauth(callback){
+  try{
+    const client=google.accounts.oauth2.initTokenClient({
+      client_id:CLIENT_ID,scope:SCOPES,prompt:'',
+      callback:async(resp)=>{
+        if(resp.error){GD.enabled=false;render();return;}
+        GD.token=resp.access_token;
+        try{const ui=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+GD.token}});const ud=await ui.json();GD.user=ud.email;}catch(e){}
+        if(callback)await callback();
+      }
+    });
+    client.requestAccessToken();
+  }catch(e){GD.enabled=false;render();}
+}
+
+// Auto-sync when app comes back to foreground
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&GD.enabled&&PIN.unlocked){
+    silentReauth(driveLoad);
+  }
+});
 
 function loadData(){
   try{S.problems=JSON.parse(localStorage.getItem('dproblem')||'[]')}catch(e){S.problems=[]}
@@ -982,7 +992,7 @@ function setupInteractions(){
   document.getElementById('btn-new-prob')?.addEventListener('click',()=>{S.showProbModal=true;render()});
   document.getElementById('btn-drive-connect')?.addEventListener('click',driveSignIn);
   document.getElementById('btn-drive-disconnect')?.addEventListener('click',driveDisconnect);
-  document.getElementById('btn-drive-sync')?.addEventListener('click',driveLoad);
+  document.getElementById('btn-drive-sync')?.addEventListener('click',()=>silentReauth(driveLoad));
   document.getElementById('btn-pin-change')?.addEventListener('click',()=>{PIN.setting=true;PIN.input='';PIN.confirm='';PIN.step=1;PIN.error='';PIN.unlocked=false;const app=document.getElementById('app');app.innerHTML=renderPinScreen();setupPinInteractions()});
   document.getElementById('btn-dash')?.addEventListener('click',()=>{S.view='dashboard';render()});
   document.getElementById('btn-backup')?.addEventListener('click',exportBackupJSON);

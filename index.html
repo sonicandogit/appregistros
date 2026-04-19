@@ -493,7 +493,7 @@ function render(){
   if(S.showEmailModal){app.innerHTML=renderEmailModal();setupEmailModal();return}
   let html='';
   if(S.view==='home')html+=renderHome();
-  else if(S.view!=='new'&&S.view!=='detail')html+=renderHeader();
+  else if(S.view!=='new'&&S.view!=='detail'&&!S.view.startsWith('gratitud')&&S.view!=='home')html+=renderHeader();
   if(S.view==='home'){/* already rendered */}
   else if(S.view==='list')html+=renderList();
   else if(S.view==='new')html+=renderForm();

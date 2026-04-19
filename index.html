@@ -350,7 +350,7 @@ function silentReauth(callback){
 
 // Auto-sync when app comes back to foreground
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible'&&GD.enabled&&PIN.unlocked){
+  if(document.visibilityState==='visible'&&GD.enabled&&PIN.unlocked&&!GD._importLock){
     silentReauth(driveLoad);
   }
 });
@@ -382,7 +382,13 @@ function importBackupJSON(file){
       if(!confirm(`Se añadirán ${newRecs.length} registros nuevos y ${newProbs.length} problemas nuevos.\n(Los ${S.records.length} registros actuales se conservan)\n\n¿Continuar?`))return;
       S.problems=[...S.problems,...newProbs];
       S.records=[...S.records,...newRecs];
-      saveData();render();
+      // Block auto-sync for 10s so Drive load doesn't overwrite the merge
+      GD._importLock=true;
+      setTimeout(()=>{GD._importLock=false;},10000);
+      localStorage.setItem('dproblem',JSON.stringify(S.problems));
+      localStorage.setItem('drecords',JSON.stringify(S.records));
+      driveSave(); // push merged data to Drive
+      render();
     }catch(x){alert('Archivo no válido.');}
   };
   fr.readAsText(file);

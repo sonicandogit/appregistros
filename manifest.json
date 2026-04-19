@@ -1,6 +1,6 @@
 {
-  "name": "Diario Psicológico",
-  "short_name": "Diario",
+  "name": "Psynodos",
+  "short_name": "Psynodos",
   "start_url": "/appregistros/",
   "display": "standalone",
   "background_color": "#FAF8F4",

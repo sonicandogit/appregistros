@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Diario Psicológico</title>
+<title>Psynodos</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="theme-color" content="#4A7C6F">
@@ -514,11 +514,13 @@ function render(){
     else if(S.view==='gratitud')html+=renderGratitudList();
     else if(S.view==='gratitud-new')html+=renderGratitudForm();
     else if(S.view==='gratitud-detail')html+=renderGratitudDetail();
+    else if(S.view==='gratitud-edit')html+=renderGratitudEdit();
     else if(S.view==='gratitud-favoritos')html+=renderGratitudFavoritos();
     else if(S.view==='gratitud-analisis')html+=renderGratitudAnalisis();
     else if(S.view==='futuro')html+=renderFuturoList();
     else if(S.view==='futuro-new')html+=renderFuturoForm();
     else if(S.view==='futuro-detail')html+=renderFuturoDetail();
+    else if(S.view==='futuro-edit')html+=renderFuturoEdit();
     else if(S.view==='futuro-analisis')html+=renderFuturoAnalisis();
   }
   app.innerHTML=html;
@@ -1378,7 +1380,7 @@ function renderGratitudDetail(){
   const g=(S.gratitudes||[]).find(g=>g.id===S.gratDetId);if(!g)return renderGratitudList();
   const c=catInfo(g.categoria);
   const emoTags=(g.emotions||[]).map(e=>`<span class="emo-tag" style="background:${getEmoColor(e.name)}22;color:${getEmoColor(e.name)}">${e.name} ${e.intensity}/10</span>`).join('');
-  return`<div class="detail-wrap"><div class="detail-hdr" style="display:flex;align-items:flex-start;justify-content:space-between"><div><button class="back-btn" id="btn-grat-back">← Volver a gratitud</button><div style="font-size:12px;color:var(--txt3)">${fmtDate(g.id)}</div></div><div style="display:flex;gap:7px"><button class="btn btn-ghost btn-sm" id="btn-grat-fav" style="color:${g.favorito?'#D4AC20':'var(--txt2)'}">${g.favorito?'★ Favorita':'☆ Favorita'}</button><button class="btn btn-danger btn-sm" id="btn-grat-del">Eliminar</button></div></div>
+  return`<div class="detail-wrap"><div class="detail-hdr" style="display:flex;align-items:flex-start;justify-content:space-between"><div><button class="back-btn" id="btn-grat-back">← Volver a gratitud</button><div style="font-size:12px;color:var(--txt3)">${fmtDate(g.id)}</div></div><div style="display:flex;gap:7px"><button class="btn btn-ghost btn-sm" id="btn-grat-edit">Editar</button><button class="btn btn-ghost btn-sm" id="btn-grat-fav" style="color:${g.favorito?'#D4AC20':'var(--txt2)'}">${g.favorito?'★ Favorita':'☆ Favorita'}</button><button class="btn btn-danger btn-sm" id="btn-grat-del">Eliminar</button></div></div>
     <div class="detail-body">
       ${g.categoria?`<div><div class="f-lbl">Categoría</div><span class="grat-cat-tag" style="background:${c.bg};color:${c.color};font-size:13px;padding:4px 12px">${c.label}</span></div>`:''}
       <div><div class="f-lbl">Agradecimiento</div><div style="font-size:15px;line-height:1.7;font-style:italic;color:var(--txt)">"${g.texto}"</div></div>
@@ -1440,6 +1442,7 @@ function setupGratitudInteractions(){
   document.getElementById('btn-grat-back')?.addEventListener('click',()=>{S.view='gratitud';render()});
   document.getElementById('btn-back-to-list')?.addEventListener('click',()=>{S.view='home';render()});
   document.getElementById('btn-grat-favoritos')?.addEventListener('click',()=>{S.view='gratitud-favoritos';render()});
+  document.getElementById('btn-grat-fav')?.addEventListener('click',()=>{const g=(S.gratitudes||[]).find(g=>g.id===S.gratDetId);if(g){g.favorito=!g.favorito;saveData();render();}});
   document.getElementById('btn-grat-analisis')?.addEventListener('click',()=>{S.view='gratitud-analisis';render()});
   document.querySelectorAll('[data-grat]').forEach(c=>c.addEventListener('click',()=>{S.gratDetId=parseInt(c.dataset.grat);S.view='gratitud-detail';render()}));
   // Category selection
@@ -1475,7 +1478,40 @@ function setupGratitudInteractions(){
     S.gratitudes.push(entry);saveData();S.gratDetId=entry.id;S.view='gratitud-detail';resetGF();render();
   });
   // Fav toggle
-  document.getElementById('btn-grat-fav')?.addEventListener('click',()=>{const g=(S.gratitudes||[]).find(g=>g.id===S.gratDetId);if(g){g.favorito=!g.favorito;saveData();render();}});
+  document.getElementById('btn-grat-edit')?.addEventListener('click',()=>{S.view='gratitud-edit';render()});
+  document.getElementById('btn-gedit-cancel')?.addEventListener('click',()=>{S.view='gratitud-detail';render()});
+  // Gratitud edit — category
+  document.querySelectorAll('[data-gecat]').forEach(b=>b.addEventListener('click',()=>{
+    const g=(S.gratitudes||[]).find(g=>g.id===S.gratDetId);if(!g)return;
+    g.categoria=g.categoria===b.dataset.gecat?null:b.dataset.gecat;render();
+  }));
+  document.getElementById('btn-add-gedit-cat')?.addEventListener('click',()=>{
+    const val=document.getElementById('gedit-custom-cat')?.value?.trim();if(!val)return;
+    const id='custom_'+val.toLowerCase().replace(/\s+/g,'_');
+    if(!GRAT_CATS.find(c=>c.id===id))GRAT_CATS.push({id,label:val,color:'#4A7C6F',bg:'#EBF3F0'});
+    const g=(S.gratitudes||[]).find(g=>g.id===S.gratDetId);if(g)g.categoria=id;render();
+  });
+  // Gratitud edit — emotions
+  document.querySelectorAll('[data-geemo]').forEach(b=>b.addEventListener('click',()=>{
+    const g=(S.gratitudes||[]).find(g=>g.id===S.gratDetId);if(!g)return;
+    if(!g.emotions)g.emotions=[];
+    const n=b.dataset.geemo;const p=b.dataset.gepri;const i=g.emotions.findIndex(e=>e.name===n);
+    if(i>=0)g.emotions.splice(i,1);else g.emotions.push({name:n,primaryName:p,intensity:5});render();
+  }));
+  document.querySelectorAll('.geemo-range').forEach(inp=>inp.addEventListener('input',()=>{
+    const idx=parseInt(inp.dataset.geidx);const val=parseInt(inp.value);
+    const g=(S.gratitudes||[]).find(g=>g.id===S.gratDetId);if(g&&g.emotions[idx])g.emotions[idx].intensity=val;
+    const disp=document.getElementById(`geslv-${idx}`);if(disp){disp.textContent=val;disp.style.color=intColor(val);}
+  }));
+  // Gratitud edit — save
+  document.getElementById('btn-gedit-save')?.addEventListener('click',()=>{
+    const g=(S.gratitudes||[]).find(g=>g.id===S.gratDetId);if(!g)return;
+    const txt=document.getElementById('gedit-texto')?.value?.trim();if(!txt){alert('El texto no puede estar vacío.');return;}
+    g.texto=txt;
+    g.emotionNotes=document.getElementById('gedit-emo-notes')?.value||'';
+    document.querySelectorAll('.geemo-range').forEach(inp=>{const idx=parseInt(inp.dataset.geidx);if(g.emotions[idx])g.emotions[idx].intensity=parseInt(inp.value);});
+    saveData();S.view='gratitud-detail';render();
+  });
   // Delete
   document.getElementById('btn-grat-del')?.addEventListener('click',()=>{if(confirm('¿Eliminar esta entrada?')){S.gratitudes=S.gratitudes.filter(g=>g.id!==S.gratDetId);saveData();S.view='gratitud';render();}});
   // Calendar nav
@@ -1598,6 +1634,7 @@ function renderFuturoDetail(){
     :`<div style="font-size:13px;color:var(--txt3);margin-top:.5rem">Fecha de revisión: ${f.fechaRevision||'No establecida'}</div>`;
   return`<div class="detail-wrap"><div class="detail-hdr" style="display:flex;align-items:flex-start;justify-content:space-between">
     <div><button class="back-btn" id="btn-fut-back">← Volver</button><div style="font-size:12px;color:var(--txt3)">Creada el ${fmtDate(f.id)}${f.fromRecordId?' · ↗ Desde registro':''}</div></div>
+    <button class="btn btn-ghost btn-sm" id="btn-fut-edit">Editar</button>
     <button class="btn btn-danger btn-sm" id="btn-fut-del">Eliminar</button>
   </div>
   <div class="detail-body">
@@ -1710,6 +1747,36 @@ function setupFuturoInteractions(){
     if(!S.futuras)S.futuras=[];
     S.futuras.push(entry);saveData();S.futDetId=entry.id;S.view='futuro-detail';resetFF();render();
   });
+  // Futuro edit
+  document.getElementById('btn-fut-edit')?.addEventListener('click',()=>{S.view='futuro-edit';render()});
+  document.getElementById('btn-fedit-cancel')?.addEventListener('click',()=>{S.view='futuro-detail';render()});
+  document.querySelectorAll('[data-fecat]').forEach(b=>b.addEventListener('click',()=>{
+    const f=(S.futuras||[]).find(f=>f.id===S.futDetId);if(!f)return;
+    f.categoria=f.categoria===b.dataset.fecat?null:b.dataset.fecat;render();
+  }));
+  document.getElementById('btn-add-fedit-cat')?.addEventListener('click',()=>{
+    const val=document.getElementById('fedit-custom-cat')?.value?.trim();if(!val)return;
+    const id='custom_'+val.toLowerCase().replace(/\s+/g,'_');
+    if(!FUT_CATS.find(c=>c.id===id))FUT_CATS.push({id,label:val,color:'#4A7C6F',bg:'#EBF3F0'});
+    const f=(S.futuras||[]).find(f=>f.id===S.futDetId);if(f)f.categoria=id;render();
+  });
+  ['peor','mejor','realista'].forEach(k=>{
+    document.getElementById(`fedit-prob-${k}`)?.addEventListener('input',e=>{
+      const el=document.getElementById(`fedit-prob-${k}-val`);if(el)el.textContent=e.target.value+'%';
+    });
+  });
+  document.getElementById('btn-fedit-save')?.addEventListener('click',()=>{
+    const f=(S.futuras||[]).find(f=>f.id===S.futDetId);if(!f)return;
+    f.contexto=document.getElementById('fedit-contexto')?.value?.trim()||'';
+    f.peor=document.getElementById('fedit-peor')?.value?.trim()||'';
+    f.mejor=document.getElementById('fedit-mejor')?.value?.trim()||'';
+    f.realista=document.getElementById('fedit-realista')?.value?.trim()||'';
+    f.probPeor=parseInt(document.getElementById('fedit-prob-peor')?.value||30);
+    f.probMejor=parseInt(document.getElementById('fedit-prob-mejor')?.value||30);
+    f.probRealista=parseInt(document.getElementById('fedit-prob-realista')?.value||40);
+    f.fechaRevision=document.getElementById('fedit-fecha')?.value||'';
+    saveData();S.view='futuro-detail';render();
+  });
   // Delete
   document.getElementById('btn-fut-del')?.addEventListener('click',()=>{
     if(confirm('¿Eliminar esta visión?')){S.futuras=S.futuras.filter(f=>f.id!==S.futDetId);saveData();S.view='futuro';render();}
@@ -1738,6 +1805,58 @@ function setupFuturoInteractions(){
     FF.peor=thoughts.map(t=>t.text).filter(Boolean).join(' / ');
     S.view='futuro-new';render();
   });
+}
+
+// ── EDIT FUNCTIONS ───────────────────────────────────────────────
+function renderGratitudEdit(){
+  const g=(S.gratitudes||[]).find(g=>g.id===S.gratDetId);if(!g)return renderGratitudList();
+  const cats=GRAT_CATS.map(c=>`<button class="grat-cat-btn ${g.categoria===c.id?'sel':''}" data-gecat="${c.id}" style="${g.categoria===c.id?`background:${c.bg};color:${c.color};border-color:${c.color}`:''}">${c.label}</button>`).join('');
+  const selNames=new Set((g.emotions||[]).map(e=>e.name));
+  const emoGroups=EMOTIONS.map(grp=>{
+    const priSel=selNames.has(grp.name);
+    const secBtns=grp.secondary.map(s=>{const sSel=selNames.has(s);return`<button class="emo-sec" data-geemo="${s}" data-gepri="${grp.name}" style="background:${grp.secBg};color:${grp.secTxt};border-color:${sSel?grp.color:grp.secBdr};opacity:${sSel?1:.55};font-weight:${sSel?500:400}">${s}</button>`;}).join('');
+    return`<div class="emo-group"><button class="emo-pri" data-geemo="${grp.name}" data-gepri="${grp.name}" style="background:${priSel?grp.color:'#F0EDEA'};color:${priSel?'#fff':'var(--txt3)'};opacity:${priSel?1:.6};${priSel?`box-shadow:0 0 0 2px #fff,0 0 0 4px ${grp.color}`:''}">${grp.name}</button><div class="emo-sec-list">${secBtns}</div></div>`;
+  }).join('');
+  const sliders=(g.emotions||[]).length?`<div class="emo-sliders" style="margin-top:1rem">${(g.emotions||[]).map((e,i)=>{const c=getEmoColor(e.name);const val=e.intensity||5;return`<div><div class="emo-sl-hdr"><span class="emo-sl-lbl" style="background:${c}">${e.name}</span></div><div class="slider-row"><input type="range" min="1" max="10" step="1" value="${val}" id="gesl-${i}" data-geidx="${i}" class="geemo-range"><span class="slider-val" id="geslv-${i}" style="color:${intColor(val)}">${val}</span></div></div>`;}).join('')}</div>`:'';
+  return`<div class="form-wrap"><div class="form-hdr"><button class="back-btn" id="btn-gedit-cancel">← Cancelar</button><div style="font-family:'Lora',serif;font-size:1rem">Editar entrada</div></div>
+    <div class="form-body" style="display:flex;flex-direction:column;gap:1.3rem">
+      <div><div class="step-num">Categoría</div><div class="grat-cat-grid" style="margin-top:.6rem">${cats}<div style="display:flex;gap:5px;align-items:center"><input type="text" id="gedit-custom-cat" placeholder="Otra..." style="width:90px;padding:6px 10px;font-size:13px;border-radius:20px;border:1.5px solid var(--bdr)"><button class="grat-cat-btn" id="btn-add-gedit-cat" style="padding:6px 12px">+</button></div></div></div>
+      <div><div class="step-num">¿Por qué estás agradecido?</div><textarea id="gedit-texto" rows="5">${g.texto||''}</textarea></div>
+      <div><div class="step-num">Emociones <span style="font-weight:400;color:var(--txt3)">(opcional)</span></div><div class="emo-groups">${emoGroups}</div>${sliders}<label style="font-size:12px;color:var(--txt3);display:block;margin-top:.8rem;margin-bottom:5px">Notas adicionales</label><textarea id="gedit-emo-notes" rows="2">${g.emotionNotes||''}</textarea></div>
+    </div>
+    <div class="form-footer"><div></div><button class="btn btn-primary btn-sm" id="btn-gedit-save">Guardar cambios</button></div>
+  </div>`;
+}
+
+function renderFuturoEdit(){
+  const f=(S.futuras||[]).find(f=>f.id===S.futDetId);if(!f)return renderFuturoList();
+  const cats=FUT_CATS.map(c=>`<button class="grat-cat-btn ${f.categoria===c.id?'sel':''}" data-fecat="${c.id}" style="${f.categoria===c.id?`background:${c.bg};color:${c.color};border-color:${c.color}`:''}">${c.label}</button>`).join('');
+  return`<div class="form-wrap"><div class="form-hdr"><button class="back-btn" id="btn-fedit-cancel">← Cancelar</button><div style="font-family:'Lora',serif;font-size:1rem">Editar visión de futuro</div></div>
+    <div class="form-body" style="display:flex;flex-direction:column;gap:1.4rem">
+      <div><div class="step-num">Categoría</div><div class="grat-cat-grid" style="margin-top:.6rem">${cats}<div style="display:flex;gap:5px;align-items:center"><input type="text" id="fedit-custom-cat" placeholder="Otra..." style="width:90px;padding:6px 10px;font-size:13px;border-radius:20px;border:1.5px solid var(--bdr)"><button class="grat-cat-btn" id="btn-add-fedit-cat" style="padding:6px 12px">+</button></div></div></div>
+      <div><div class="step-num">Contexto o situación</div><textarea id="fedit-contexto" rows="2">${f.contexto||''}</textarea></div>
+      <div style="background:var(--redL);border:1px solid #e8c0c0;border-radius:var(--rs);padding:1rem 1.2rem">
+        <div class="step-num" style="color:var(--dng)">Peor escenario</div>
+        <textarea id="fedit-peor" rows="3">${f.peor||''}</textarea>
+        <div style="margin-top:.8rem"><label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:5px">Probabilidad percibida: <span id="fedit-prob-peor-val" style="font-weight:500;color:var(--dng)">${f.probPeor||30}%</span></label>
+        <input type="range" min="0" max="100" step="5" value="${f.probPeor||30}" id="fedit-prob-peor" style="width:100%"></div>
+      </div>
+      <div style="background:var(--grnL);border:1px solid #a8d0c0;border-radius:var(--rs);padding:1rem 1.2rem">
+        <div class="step-num" style="color:var(--grn)">Mejor escenario posible ✦</div>
+        <textarea id="fedit-mejor" rows="4">${f.mejor||''}</textarea>
+        <div style="margin-top:.8rem"><label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:5px">Probabilidad percibida: <span id="fedit-prob-mejor-val" style="font-weight:500;color:var(--grn)">${f.probMejor||30}%</span></label>
+        <input type="range" min="0" max="100" step="5" value="${f.probMejor||30}" id="fedit-prob-mejor" style="width:100%"></div>
+      </div>
+      <div style="background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--rs);padding:1rem 1.2rem">
+        <div class="step-num">Escenario realista</div>
+        <textarea id="fedit-realista" rows="3">${f.realista||''}</textarea>
+        <div style="margin-top:.8rem"><label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:5px">Probabilidad percibida: <span id="fedit-prob-realista-val" style="font-weight:500;color:var(--wrm)">${f.probRealista||40}%</span></label>
+        <input type="range" min="0" max="100" step="5" value="${f.probRealista||40}" id="fedit-prob-realista" style="width:100%"></div>
+      </div>
+      <div><div class="step-num">Fecha de revisión</div><input type="date" id="fedit-fecha" value="${f.fechaRevision||''}" style="width:auto"></div>
+    </div>
+    <div class="form-footer"><div></div><button class="btn btn-primary btn-sm" id="btn-fedit-save">Guardar cambios</button></div>
+  </div>`;
 }
 
 // ── REVISION ALERT MODAL ─────────────────────────────────────────

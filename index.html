@@ -374,7 +374,17 @@ function exportBackupJSON(){
 }
 function importBackupJSON(file){
   const fr=new FileReader();
-  fr.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.records)throw 0;if(!confirm(`Importar ${(d.problems||[]).length} problemas y ${d.records.length} registros. ¿Continuar?`))return;S.problems=d.problems||[];S.records=d.records||[];saveData();render()}catch(x){alert('Archivo no válido.')}};
+  fr.onload=e=>{
+    try{
+      const d=JSON.parse(e.target.result);if(!d.records)throw 0;
+      const newRecs=d.records.filter(r=>!S.records.find(e=>e.id===r.id));
+      const newProbs=(d.problems||[]).filter(p=>!S.problems.find(e=>String(e.id)===String(p.id)));
+      if(!confirm(`Se añadirán ${newRecs.length} registros nuevos y ${newProbs.length} problemas nuevos.\n(Los ${S.records.length} registros actuales se conservan)\n\n¿Continuar?`))return;
+      S.problems=[...S.problems,...newProbs];
+      S.records=[...S.records,...newRecs];
+      saveData();render();
+    }catch(x){alert('Archivo no válido.');}
+  };
   fr.readAsText(file);
 }
 function getProbName(id){const p=S.problems.find(p=>String(p.id)===String(id));return p?p.name:'Sin problema'}

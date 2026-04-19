@@ -492,18 +492,19 @@ function render(){
   if(S.showExport){app.innerHTML=renderExportModal();setupExportModal();return}
   if(S.showEmailModal){app.innerHTML=renderEmailModal();setupEmailModal();return}
   let html='';
-  if(S.view==='home')html+=renderHome();
-  else if(S.view!=='new'&&S.view!=='detail'&&!S.view.startsWith('gratitud')&&S.view!=='home')html+=renderHeader();
-  if(S.view==='home'){/* already rendered */}
-  else if(S.view==='list')html+=renderList();
-  else if(S.view==='new')html+=renderForm();
-  else if(S.view==='detail')html+=renderDetail();
-  else if(S.view==='dashboard')html+=renderDashboard();
-  else if(S.view==='gratitud')html+=renderGratitudList();
-  else if(S.view==='gratitud-new')html+=renderGratitudForm();
-  else if(S.view==='gratitud-detail')html+=renderGratitudDetail();
-  else if(S.view==='gratitud-favoritos')html+=renderGratitudFavoritos();
-  else if(S.view==='gratitud-analisis')html+=renderGratitudAnalisis();
+  if(S.view==='home'){html+=renderHome();}
+  else{
+    if(S.view!=='new'&&S.view!=='detail'&&!S.view.startsWith('gratitud'))html+=renderHeader();
+    if(S.view==='list')html+=renderList();
+    else if(S.view==='new')html+=renderForm();
+    else if(S.view==='detail')html+=renderDetail();
+    else if(S.view==='dashboard')html+=renderDashboard();
+    else if(S.view==='gratitud')html+=renderGratitudList();
+    else if(S.view==='gratitud-new')html+=renderGratitudForm();
+    else if(S.view==='gratitud-detail')html+=renderGratitudDetail();
+    else if(S.view==='gratitud-favoritos')html+=renderGratitudFavoritos();
+    else if(S.view==='gratitud-analisis')html+=renderGratitudAnalisis();
+  }
   app.innerHTML=html;
   setupInteractions();
 }
@@ -1326,7 +1327,7 @@ function renderGratitudForm(){
   const sliders=GF.emotions.length?`<div class="emo-sliders" style="margin-top:1rem">${GF.emotions.map((e,i)=>{const c=getEmoColor(e.name);const val=e.intensity||5;return`<div><div class="emo-sl-hdr"><span class="emo-sl-lbl" style="background:${c}">${e.name}</span></div><div class="slider-row"><input type="range" min="1" max="10" step="1" value="${val}" id="gsl-${i}" data-gidx="${i}" class="gemo-range"><span class="slider-val" id="gslv-${i}" style="color:${intColor(val)}">${val}</span></div></div>`;}).join('')}</div>`:'';
   return`<div class="form-wrap"><div class="form-hdr"><button class="back-btn" id="btn-grat-back">← Volver a gratitud</button><div style="font-family:'Lora',serif;font-size:1rem">Nueva entrada de gratitud</div></div>
     <div class="form-body" style="display:flex;flex-direction:column;gap:1.3rem">
-      <div><div class="step-num">Categoría</div><div class="step-hint" style="margin-bottom:.8rem">¿De qué tipo es lo que quieres agradecer hoy?</div><div class="grat-cat-grid">${cats}</div></div>
+      <div><div class="step-num">Categoría</div><div class="step-hint" style="margin-bottom:.8rem">¿De qué tipo es lo que quieres agradecer hoy?</div><div class="grat-cat-grid">${cats}<div style="display:flex;gap:5px;align-items:center"><input type="text" id="grat-custom-cat" placeholder="Otra..." style="width:90px;padding:6px 10px;font-size:13px;border-radius:20px;border:1.5px solid var(--bdr)"><button class="grat-cat-btn" id="btn-add-custom-cat" style="padding:6px 12px">+</button></div></div></div>
       <div><div class="step-num">¿Por qué estás agradecido?</div><div class="step-hint" style="margin-bottom:.8rem">Sé específico — cuanto más detalle, más efecto.</div><textarea id="grat-texto" rows="5" placeholder="Hoy me siento agradecido/a por...">${GF.texto}</textarea></div>
       <div><div class="step-num">¿Qué emoción te produce? <span style="font-weight:400;color:var(--txt3)">(opcional)</span></div><div class="step-hint" style="margin-bottom:.8rem">Conecta el agradecimiento con tu estado emocional.</div><div class="emo-groups">${emoGroups}</div>${sliders}<label style="font-size:12px;color:var(--txt3);display:block;margin-top:.8rem;margin-bottom:5px">Notas adicionales</label><textarea id="grat-emo-notes" rows="2" placeholder="Matices o comentarios...">${GF.emotionNotes}</textarea></div>
     </div>
@@ -1404,6 +1405,15 @@ function setupGratitudInteractions(){
   document.querySelectorAll('[data-grat]').forEach(c=>c.addEventListener('click',()=>{S.gratDetId=parseInt(c.dataset.grat);S.view='gratitud-detail';render()}));
   // Category selection
   document.querySelectorAll('[data-gcat]').forEach(b=>b.addEventListener('click',()=>{GF.texto=document.getElementById('grat-texto')?.value||GF.texto;GF.emotionNotes=document.getElementById('grat-emo-notes')?.value||GF.emotionNotes;GF.categoria=GF.categoria===b.dataset.gcat?null:b.dataset.gcat;render()}));
+  // Custom category
+  document.getElementById('btn-add-custom-cat')?.addEventListener('click',()=>{
+    const inp=document.getElementById('grat-custom-cat');const val=inp?.value?.trim();if(!val)return;
+    GF.texto=document.getElementById('grat-texto')?.value||GF.texto;GF.emotionNotes=document.getElementById('grat-emo-notes')?.value||GF.emotionNotes;
+    const id='custom_'+val.toLowerCase().replace(/\s+/g,'_');
+    if(!GRAT_CATS.find(c=>c.id===id))GRAT_CATS.push({id,label:val,color:'#4A7C6F',bg:'#EBF3F0'});
+    GF.categoria=id;render();
+  });
+  document.getElementById('grat-custom-cat')?.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('btn-add-custom-cat')?.click()});
   // Emotion selection in form
   document.querySelectorAll('[data-gemo]').forEach(b=>b.addEventListener('click',()=>{
     GF.texto=document.getElementById('grat-texto')?.value||GF.texto;GF.emotionNotes=document.getElementById('grat-emo-notes')?.value||GF.emotionNotes;
